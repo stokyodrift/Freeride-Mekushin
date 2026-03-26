@@ -72,6 +72,9 @@
   .dones{font-size:14px;color:#666;line-height:1.6}
   .restb{margin-top:1.5rem;padding:11px 24px;border:1px solid #ddd;border-radius:10px;background:#fff;font-size:14px;color:#555;cursor:pointer;font-family:inherit}
   .restb:hover{background:#f5f5f2}
+  .save-status{text-align:center;font-size:13px;margin-top:10px;min-height:20px}
+  .save-ok{color:#1D9E75}
+  .save-err{color:#E24B4A}
   input[type=range]{width:100%;accent-color:#1D9E75;cursor:pointer}
   @media(prefers-color-scheme:dark){
     body{background:#111;color:#f0f0ee}
@@ -93,7 +96,7 @@
     .bench-row{border-bottom-color:#252525}
     .hero-sub,.smeta,.wmut,.imeta,.gsub,.bench-sub{color:#555}
     .sh,.wbig,.gname,.bench-name,.itxt{color:#f0f0ee}
-    .ss,.rl,.ss{color:#888}
+    .ss,.rl{color:#888}
   }
 </style>
 </head>
@@ -108,7 +111,6 @@
   <div class="prog"><div class="prog-f" id="pf" style="width:0%"></div></div>
   <div class="smeta"><span id="sname"></span><span id="scount"></span></div>
 
-  <!-- Step 0: Feeling -->
   <div id="s0">
     <div class="sh">How are you feeling today?</div>
     <div class="ss">Tap a number for each. 1 = rough, 5 = solid. All three needed to continue.</div>
@@ -146,7 +148,6 @@
     </div>
   </div>
 
-  <!-- Step 1: Movement -->
   <div id="s1" style="display:none">
     <div class="sh">Did you move today?</div>
     <div class="ss">Select everything that applies — at least one to continue.</div>
@@ -163,7 +164,6 @@
     </div>
   </div>
 
-  <!-- Step 2: Win -->
   <div id="s2" style="display:none">
     <div class="sh">One win today</div>
     <div class="ss">Anything counts — pool session, good food, early night. Type something to continue.</div>
@@ -172,7 +172,6 @@
     </div>
   </div>
 
-  <!-- Step 3: Goals -->
   <div id="s3" style="display:none">
     <div class="sh">May 31 goals</div>
     <div class="ss">Tap + if you completed a session today. Then hit Next.</div>
@@ -210,7 +209,6 @@
     </div>
   </div>
 
-  <!-- Step 4: Weight -->
   <div id="s4" style="display:none">
     <div class="sh">Weight check</div>
     <div class="ss">Move the slider to today's reading. Target 85 kg by November 2026.</div>
@@ -230,7 +228,6 @@
     </div>
   </div>
 
-  <!-- Step 5: Coach insight + benchmarks -->
   <div id="s5" style="display:none">
     <div class="sh">Coach insight</div>
     <div class="ss">Based on what you just logged.</div>
@@ -240,7 +237,6 @@
       </div>
       <div class="imeta" id="imeta"></div>
     </div>
-
     <div class="sh" style="margin-bottom:4px;font-size:14px">Sport benchmarks</div>
     <div class="ss">Your long-game targets for Nov 2026.</div>
     <div class="card">
@@ -275,131 +271,191 @@
     </div>
   </div>
 
-  <!-- Done -->
   <div id="sdone" style="display:none">
     <div class="done">
       <div class="doneh">Logged. Keep going.</div>
-      <div class="dones" id="done-sub">Check-in complete. Come back tomorrow.</div>
+      <div class="dones">Check-in saved to your database. Come back tomorrow.</div>
       <button class="restb" onclick="restart()">New check-in</button>
     </div>
   </div>
 
-  <!-- Nav -->
   <div class="nav" id="navb">
     <button class="nbk" id="bbk" onclick="goBack()" disabled>← Back</button>
     <button class="nnxt" id="bnxt" onclick="goNext()" disabled>Next →</button>
   </div>
+  <div class="save-status" id="save-status"></div>
 
 </div>
 
 <script>
-var TOTAL = 6;
-var NAMES = ['Feeling','Movement','One win','May 31 goals','Weight','Insight'];
-var cur = 0;
-var st = {e:0, s:0, m:0, moves:[], win:'', pool:0, leg:3, core:3, w:95};
+  var SUPABASE_URL = 'https://qdlggygscbpzyxsqptgr.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_ZmcwCCD8JOIr990GknRifw_0x6CbiwC';
 
-document.getElementById('td').textContent = new Date().toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
+  var TOTAL = 6;
+  var NAMES = ['Feeling','Movement','One win','May 31 goals','Weight','Insight'];
+  var cur = 0;
+  var st = {e:0, s:0, m:0, moves:[], win:'', pool:0, leg:3, core:3, w:95};
 
-function show() {
-  for (var i = 0; i < TOTAL; i++) {
-    document.getElementById('s'+i).style.display = i === cur ? 'block' : 'none';
+  document.getElementById('td').textContent = new Date().toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
+
+  function show() {
+    for (var i = 0; i < TOTAL; i++) {
+      document.getElementById('s'+i).style.display = i === cur ? 'block' : 'none';
+    }
+    document.getElementById('sdone').style.display = cur === TOTAL ? 'block' : 'none';
+    document.getElementById('navb').style.display = cur === TOTAL ? 'none' : 'flex';
+    document.getElementById('pf').style.width = Math.round(cur / TOTAL * 100) + '%';
+    document.getElementById('sname').textContent = cur < TOTAL ? NAMES[cur] : '';
+    document.getElementById('scount').textContent = cur < TOTAL ? (cur + 1) + ' of ' + TOTAL : '';
+    document.getElementById('bbk').disabled = cur === 0;
+    if (cur === 5) buildInsight();
+    ck();
   }
-  document.getElementById('sdone').style.display = cur === TOTAL ? 'block' : 'none';
-  document.getElementById('navb').style.display = cur === TOTAL ? 'none' : 'flex';
-  document.getElementById('pf').style.width = Math.round(cur / TOTAL * 100) + '%';
-  document.getElementById('sname').textContent = cur < TOTAL ? NAMES[cur] : '';
-  document.getElementById('scount').textContent = cur < TOTAL ? (cur + 1) + ' of ' + TOTAL : '';
-  document.getElementById('bbk').disabled = cur === 0;
-  if (cur === 5) buildInsight();
-  ck();
-}
 
-function ck() {
-  var ok = false;
-  if (cur === 0) ok = st.e > 0 && st.s > 0 && st.m > 0;
-  else if (cur === 1) ok = st.moves.length > 0;
-  else if (cur === 2) ok = st.win.length > 0;
-  else ok = true;
-  var b = document.getElementById('bnxt');
-  b.disabled = !ok;
-  b.className = ok ? 'nnxt rdy' : 'nnxt';
-  b.textContent = cur === TOTAL - 1 ? 'Finish →' : 'Next →';
-}
-
-function goNext() { if (cur < TOTAL) { cur++; show(); } }
-function goBack() { if (cur > 0) { cur--; show(); } }
-
-function doPip(el) {
-  var g = el.dataset.g, v = parseInt(el.dataset.v);
-  st[g] = v;
-  var cls = g === 'e' ? 'eon' : g === 's' ? 'son' : 'mon';
-  var all = document.querySelectorAll('.pip[data-g="' + g + '"]');
-  for (var i = 0; i < all.length; i++) {
-    all[i].classList.remove(cls);
-    if (parseInt(all[i].dataset.v) <= v) all[i].classList.add(cls);
+  function ck() {
+    var ok = false;
+    if (cur === 0) ok = st.e > 0 && st.s > 0 && st.m > 0;
+    else if (cur === 1) ok = st.moves.length > 0;
+    else if (cur === 2) ok = st.win.length > 0;
+    else ok = true;
+    var b = document.getElementById('bnxt');
+    b.disabled = !ok;
+    b.className = ok ? 'nnxt rdy' : 'nnxt';
+    b.textContent = cur === TOTAL - 1 ? 'Finish →' : 'Next →';
   }
-  ck();
-}
 
-function togChip(el) {
-  el.classList.toggle('on');
-  var n = el.textContent;
-  if (el.classList.contains('on')) {
-    if (st.moves.indexOf(n) < 0) st.moves.push(n);
-  } else {
-    st.moves = st.moves.filter(function(m) { return m !== n; });
+  function goNext() {
+    if (cur === TOTAL - 1) {
+      saveToSupabase();
+    } else if (cur < TOTAL) {
+      cur++;
+      show();
+    }
   }
-  ck();
-}
 
-function adj(k, d) {
-  st[k] = Math.max(0, Math.min(8, st[k] + d));
-  document.getElementById('n' + k).textContent = st[k];
-  document.getElementById('b' + k).style.width = Math.round(st[k] / 8 * 100) + '%';
-}
-
-function updW(v) {
-  var w = parseFloat(v); st.w = w;
-  document.getElementById('wdisp').textContent = w.toFixed(1);
-  var l = Math.max(0, 95 - w);
-  document.getElementById('wdelta').textContent = l > 0 ? '↓ ' + l.toFixed(1) + ' kg' : '';
-  document.getElementById('bw').style.width = Math.min(100, Math.round(l / 10 * 100)) + '%';
-  document.getElementById('wlbl').textContent = l.toFixed(1) + ' kg lost of 10 kg goal';
-}
-
-function buildInsight() {
-  var t, m;
-  if (st.pool < 1) {
-    t = 'Zero pool sessions logged yet — that\'s the one open gap. Booking a slot this week breaks the seal.';
-    m = 'May 31 goal: 8 pool sessions';
-  } else if (st.e > 0 && st.e <= 2) {
-    t = 'Low energy noted. A walk, good food, and an early night is training too. Your body is rebuilding — trust it.';
-    m = 'Recovery is part of the programme';
-  } else if (st.s >= 4) {
-    t = 'Shoulder feeling strong today. Good sign. Don\'t race the timeline though — June is the green light.';
-    m = 'Laterjet recovery — 75% there';
-  } else if (st.leg >= 7 && st.core >= 7) {
-    t = 'Leg and core are almost done. Lock in the pool and you\'ll finish May clean across all three.';
-    m = 'May 31 goals — final push';
-  } else {
-    t = 'Leg and core are on track. The pool is the one to protect this week — don\'t let it drift.';
-    m = 'Based on your May 31 goals';
+  function goBack() {
+    if (cur > 0) { cur--; show(); }
   }
-  document.getElementById('itxt').textContent = t;
-  document.getElementById('imeta').textContent = m;
-}
 
-function restart() {
-  cur = 0; st.e = 0; st.s = 0; st.m = 0; st.moves = []; st.win = '';
-  var pips = document.querySelectorAll('.pip');
-  for (var i = 0; i < pips.length; i++) pips[i].className = 'pip';
-  var chips = document.querySelectorAll('.chip');
-  for (var i = 0; i < chips.length; i++) chips[i].classList.remove('on');
-  document.getElementById('win').value = '';
+  function doPip(el) {
+    var g = el.dataset.g, v = parseInt(el.dataset.v);
+    st[g] = v;
+    var cls = g === 'e' ? 'eon' : g === 's' ? 'son' : 'mon';
+    var all = document.querySelectorAll('.pip[data-g="' + g + '"]');
+    for (var i = 0; i < all.length; i++) {
+      all[i].classList.remove(cls);
+      if (parseInt(all[i].dataset.v) <= v) all[i].classList.add(cls);
+    }
+    ck();
+  }
+
+  function togChip(el) {
+    el.classList.toggle('on');
+    var n = el.textContent;
+    if (el.classList.contains('on')) {
+      if (st.moves.indexOf(n) < 0) st.moves.push(n);
+    } else {
+      st.moves = st.moves.filter(function(m) { return m !== n; });
+    }
+    ck();
+  }
+
+  function adj(k, d) {
+    st[k] = Math.max(0, Math.min(8, st[k] + d));
+    document.getElementById('n' + k).textContent = st[k];
+    document.getElementById('b' + k).style.width = Math.round(st[k] / 8 * 100) + '%';
+  }
+
+  function updW(v) {
+    var w = parseFloat(v); st.w = w;
+    document.getElementById('wdisp').textContent = w.toFixed(1);
+    var l = Math.max(0, 95 - w);
+    document.getElementById('wdelta').textContent = l > 0 ? '↓ ' + l.toFixed(1) + ' kg' : '';
+    document.getElementById('bw').style.width = Math.min(100, Math.round(l / 10 * 100)) + '%';
+    document.getElementById('wlbl').textContent = l.toFixed(1) + ' kg lost of 10 kg goal';
+  }
+
+  function buildInsight() {
+    var t, m;
+    if (st.pool < 1) {
+      t = 'Zero pool sessions logged yet — that\'s the one open gap. Booking a slot this week breaks the seal.';
+      m = 'May 31 goal: 8 pool sessions';
+    } else if (st.e > 0 && st.e <= 2) {
+      t = 'Low energy noted. A walk, good food, and an early night is training too. Your body is rebuilding — trust it.';
+      m = 'Recovery is part of the programme';
+    } else if (st.s >= 4) {
+      t = 'Shoulder feeling strong today. Good sign. Don\'t race the timeline though — June is the green light.';
+      m = 'Laterjet recovery — 75% there';
+    } else if (st.leg >= 7 && st.core >= 7) {
+      t = 'Leg and core are almost done. Lock in the pool and you\'ll finish May clean across all three.';
+      m = 'May 31 goals — final push';
+    } else {
+      t = 'Leg and core are on track. The pool is the one to protect this week — don\'t let it drift.';
+      m = 'Based on your May 31 goals';
+    }
+    document.getElementById('itxt').textContent = t;
+    document.getElementById('imeta').textContent = m;
+  }
+
+  function saveToSupabase() {
+    var statusEl = document.getElementById('save-status');
+    statusEl.textContent = 'Saving...';
+    statusEl.className = 'save-status';
+
+    var today = new Date().toISOString().split('T')[0];
+    var payload = {
+      date: today,
+      energy: st.e,
+      shoulder: st.s,
+      mood: st.m,
+      moves: st.moves.join(','),
+      win: st.win,
+      pool: st.pool,
+      leg: st.leg,
+      core: st.core,
+      weight: st.w
+    };
+
+    fetch(SUPABASE_URL + '/rest/v1/checkins', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(payload)
+    }).then(function(res) {
+      if (res.ok) {
+        statusEl.textContent = '';
+        cur = TOTAL;
+        show();
+      } else {
+        res.text().then(function(txt) {
+          statusEl.textContent = 'Save failed — try again.';
+          statusEl.className = 'save-status save-err';
+          console.error(txt);
+        });
+      }
+    }).catch(function(err) {
+      statusEl.textContent = 'Connection error — try again.';
+      statusEl.className = 'save-status save-err';
+      console.error(err);
+    });
+  }
+
+  function restart() {
+    cur = 0; st.e = 0; st.s = 0; st.m = 0; st.moves = []; st.win = '';
+    var pips = document.querySelectorAll('.pip');
+    for (var i = 0; i < pips.length; i++) pips[i].className = 'pip';
+    var chips = document.querySelectorAll('.chip');
+    for (var i = 0; i < chips.length; i++) chips[i].classList.remove('on');
+    document.getElementById('win').value = '';
+    document.getElementById('save-status').textContent = '';
+    show();
+  }
+
   show();
-}
-
-show();
 </script>
 </body>
 </html>
